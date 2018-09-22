@@ -15,9 +15,6 @@ lock_of_voice_dict = threading.Lock()
 
 voice_material_dir = os.environ[ 'HOME' ] + '/Music/voice_materials/'
 
-print( voice_material_dir )
-
-
 def SpeechPlay_GetFiles( term_dir ):
     term_list = os.listdir( voice_material_dir + 'music/' )
     file_list = []
@@ -32,6 +29,7 @@ def SpeechPlay_GetFiles( term_dir ):
 def SpeechPlay_Callback( text ):
     global voice_publisher
     global tts_publisher
+    global voice_dict
 
     voice_material_key = text.data
 
@@ -39,19 +37,15 @@ def SpeechPlay_Callback( text ):
     local_dict = voice_dict
     lock_of_voice_dict.release()
 
-    if( None != local_dict.get( voice_material_key ) ):
+    speech_file_name = local_dict.get( voice_material_key )
+
+    if( None != speech_file_name ):
         # Try the map way 
-        if( os.path.isfile( local_dict.get( voice_material_key ) ) ):
-            voice_publisher.publish( local_dict.get( voice_material_key ) )
-            print( "Send file to voice play node.")
-        else:
-            local_dict.pop( voice_material_key )
-            tts_publisher.publish( text )
-            print( "Send text to tts node.")
+        voice_publisher.publish( speech_file_name )
+        print( "Send file to voice play node.")
     else:
         # Try the hash way
-        hash_md5 = hashlib.md5( text.data ).hexdigest()
-        speech_file_name = voice_material_dir + "speech/" + hash_md5 + ".wav"
+        speech_file_name = voice_material_dir + "speech/" + hashlib.md5( text.data ).hexdigest() + ".wav"
 
         if( os.path.isfile( speech_file_name ) ):
             voice_publisher.publish( speech_file_name )
@@ -61,6 +55,8 @@ def SpeechPlay_Callback( text ):
             print( "Send text to tts node.")
             
 def SpeechPlay_FileMonitor( ):
+    global voice_dict
+
     while( True ):
         local_dict = {}
         voice_file_list = SpeechPlay_GetFiles( voice_material_dir )
