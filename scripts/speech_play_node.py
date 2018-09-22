@@ -9,6 +9,8 @@ import filetype
 from std_msgs.msg import String
 import threading
 import hashlib
+from xfyun_tts.srv import *
+import shutil
 
 voice_dict = {}
 lock_of_voice_dict = threading.Lock()
@@ -25,6 +27,14 @@ def SpeechPlay_GetFiles( term_dir ):
             file_list.append( term_path )
     return file_list
 
+def SpeechPlay_TTS( text ):
+    try:
+        speech_synthesis = rospy.ServiceProxy( 'SpeechSynthesis', SpeechSynthesis )
+        synthesis_file = speech_synthesis( text.data )
+        return synthesis_file.file_path
+    except rospy.ServiceException, e:
+        print( "Service call failed: %s" % e )
+    return "None"
 
 def SpeechPlay_Callback( text ):
     global voice_publisher
@@ -42,17 +52,26 @@ def SpeechPlay_Callback( text ):
     if( None != speech_file_name ):
         # Try the map way 
         voice_publisher.publish( speech_file_name )
-        print( "Send file to voice play node.")
+        print( "Play specific music.")
     else:
         # Try the hash way
         speech_file_name = voice_material_dir + "speech/" + hashlib.md5( text.data ).hexdigest() + ".wav"
 
         if( os.path.isfile( speech_file_name ) ):
             voice_publisher.publish( speech_file_name )
-            print( "Send file to voice play node.")
+            print( "Play speech in base.")
         else:
-            tts_publisher.publish( text )
-            print( "Send text to tts node.")
+            print( "Call tts service.")
+            synthesis_file = SpeechPlay_TTS( text )
+
+            if( os.path.isfile( synthesis_file ) ):
+                speech_file_name = voice_material_dir + "speech/" + hashlib.md5( text.data ).hexdigest() + ".wav"
+                shutil.copyfile( synthesis_file, speech_file_name )
+
+                voice_publisher.publish( speech_file_name )
+                print( "Play synthesis voice.")
+            else:
+                print( "TTS failed" )
             
 def SpeechPlay_FileMonitor( ):
     global voice_dict
@@ -81,6 +100,11 @@ if __name__ == '__main__':
     
     if( False == os.path.exists( voice_material_dir + 'speech/' ) ):
         os.mkdir( voice_material_dir + 'speech/' )
+
+    try:
+        rospy.wait_for_service( 'SpeechSynthesis', 3 )
+    except rospy.ROSException, e:
+        print( "TTS service is closed" )
 
     file_monitor = threading.Thread( target = SpeechPlay_FileMonitor, name = "FileMonitor" )
     file_monitor.setDaemon( True )
